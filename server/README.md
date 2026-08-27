@@ -8,7 +8,7 @@ Person 2 owns the Next.js UI. Person 3 owns FastAPI WebSockets (`main.py`, `live
 
 | File | Role |
 | :--- | :--- |
-| [app/gemini/client.py](app/gemini/client.py) | `google-genai` client, TEXT Live config, PCM/JPEG blob helpers, token knobs |
+| [app/gemini/client.py](app/gemini/client.py) | `google-genai` client, AUDIO Live config, PCM/JPEG blob helpers, token knobs |
 | [app/gemini/prompts.py](app/gemini/prompts.py) | System instruction + Pydantic `LiveTick` / `SessionSummary` |
 | [app/utils/json_parser.py](app/utils/json_parser.py) | Stream-safe parser (fences, partial chunks, concatenated objects) |
 
@@ -21,6 +21,7 @@ from app.gemini import (
     build_live_config,
     audio_blob,
     video_blob,
+    ack_tool_call,
     SESSION_END_TEXT,
     TARGET_FPS,
     MAX_FRAME_WIDTH,
@@ -29,7 +30,7 @@ from app.gemini import (
     LiveTick,
     SessionSummary,
 )
-from app.utils import JsonStreamParser
+from app.utils import JsonStreamParser, parse_tool_call
 ```
 
 Live API **does not** support `response_schema`. JSON is enforced by the system prompt plus `JsonStreamParser`. Invalid objects are dropped so the WebSocket loop does not crash.
@@ -40,7 +41,7 @@ Copy [`.env.example`](.env.example) to `server/.env` (never commit `.env`).
 
 ```
 GEMINI_API_KEY=your-key
-GEMINI_MODEL=gemini-live-2.5-flash-preview
+GEMINI_MODEL=gemini-3.1-flash-live-preview
 ```
 
 `get_client()` loads `server/.env`, then a `.env` in the process working directory. It raises `RuntimeError` if `GEMINI_API_KEY` is missing.
@@ -49,10 +50,26 @@ GEMINI_MODEL=gemini-live-2.5-flash-preview
 
 ## Model compatibility (important)
 
-- Session modality is **TEXT**, not AUDIO. Native-audio-only models cannot emit HUD JSON.
-- Default: `gemini-live-2.5-flash-preview`. `gemini-2.0-flash-live-001` is retired.
-- Do **not** switch to a native-audio Live model to “make it talk.” This product is gauges + a scorecard.
-- Video on Live is capped at **1 FPS**. Sending faster wastes quota and does not improve posture/eye-contact.
+As of the [Gemini models list](https://ai.google.dev/gemini-api/docs/models) (27 Aug 2026), the Live API models are:
+
+| Model | Endpoint | Use here? |
+| :--- | :--- | :--- |
+| **Gemini 3.1 Flash Live** | `gemini-3.1-flash-live-preview` | **Yes — default.** Inputs: text, images, audio, video. Current Live API model. |
+| Gemini 2.5 Flash Live | `gemini-2.5-flash-native-audio-preview-12-2025` | Older native-audio Live; Google tells you to migrate to 3.1. |
+| Gemini 3.5 Live Translate | `gemini-3.5-live-translate-preview` | No — speech-to-speech translation only. |
+| `gemini-live-2.5-flash-preview` / `gemini-2.0-flash-live-001` | — | Inactive / retired. Do not use. |
+
+`gemini-3.7-flash` is the latest general Flash model, but it is **not** a Live API model. SpeakerSense streams mic + webcam over Live WebSockets, so we stay on Flash Live.
+
+**Native audio constraint:** `gemini-3.1-flash-live-preview` does **not** support `response_modalities=[TEXT]` (WebSocket 1011). `build_live_config()` uses **AUDIO**, plus:
+
+- `emit_live` / `emit_summary` tools (structured HUD/scorecard args — Live has no `response_schema`)
+- output audio transcription as a JSON-text fallback for `JsonStreamParser`
+- input audio transcription for WPM / fillers
+
+Do not flip the session back to TEXT. Do not play model audio to the presenter (feedback loop). Person 3 must **ack tool calls** (`ack_tool_call`) or the turn stalls — 3.1 Live function calling is synchronous.
+
+Video on Live is capped at **1 FPS**. Sending faster wastes quota and does not improve posture/eye-contact.
 
 ## Media contract (Person 2 + Person 3)
 
@@ -138,9 +155,10 @@ from app.gemini import (
     build_live_config,
     audio_blob,
     video_blob,
+    ack_tool_call,
     SESSION_END_TEXT,
 )
-from app.utils import JsonStreamParser
+from app.utils import JsonStreamParser, parse_tool_call
 
 client = get_client()
 parser = JsonStreamParser()
@@ -153,15 +171,23 @@ async with client.aio.live.connect(
     await session.send_realtime_input(video=video_blob(jpeg_bytes))
 
     async for message in session.receive():
+        if message.tool_call:
+            acks = []
+            for fc in message.tool_call.function_calls or []:
+                event = parse_tool_call(fc.name, fc.args)
+                if event is not None:
+                    await websocket.send_json(event.model_dump(mode="json"))
+                acks.append(ack_tool_call(fc))
+            if acks:
+                await session.send_tool_response(function_responses=acks)
         if message.text:
             for event in parser.feed(message.text):
                 await websocket.send_json(event.model_dump(mode="json"))
 
-    # user stop
     await session.send_realtime_input(text=SESSION_END_TEXT)
 ```
 
-`build_live_config()` already sets TEXT modality, the coaching system instruction, and input audio transcription (helps WPM / fillers). Do not override `response_modalities` to AUDIO.
+`build_live_config()` sets AUDIO modality, coaching tools, and input/output transcription. Do not override `response_modalities` to TEXT.
 
 Use a **new** `JsonStreamParser()` (or `parser.reset()`) per browser session.
 

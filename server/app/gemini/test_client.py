@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from app.gemini.client import (
     AUDIO_SAMPLE_RATE,
+    DEFAULT_MODEL,
     JPEG_QUALITY,
     MAX_FRAME_WIDTH,
     TARGET_FPS,
@@ -35,11 +36,25 @@ class GetClientTests(unittest.TestCase):
 
 
 class LiveConfigTests(unittest.TestCase):
-    def test_text_modality(self) -> None:
+    def test_audio_modality(self) -> None:
         config = build_live_config()
         modalities = config.response_modalities or []
         names = [getattr(item, "name", str(item)) for item in modalities]
-        self.assertTrue(any("TEXT" in name.upper() for name in names))
+        self.assertTrue(any("AUDIO" in name.upper() for name in names))
+
+    def test_default_model_is_current_live(self) -> None:
+        self.assertEqual(DEFAULT_MODEL, "gemini-3.1-flash-live-preview")
+
+    def test_coaching_tools_present(self) -> None:
+        config = build_live_config()
+        self.assertTrue(config.tools)
+        names = [
+            decl.name
+            for tool in config.tools
+            for decl in (tool.function_declarations or [])
+        ]
+        self.assertIn("emit_live", names)
+        self.assertIn("emit_summary", names)
 
     def test_system_instruction_present(self) -> None:
         config = build_live_config()

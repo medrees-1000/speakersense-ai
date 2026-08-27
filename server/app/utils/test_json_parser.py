@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from app.gemini.prompts import LiveTick, SessionSummary
-from app.utils.json_parser import JsonStreamParser
+from app.utils.json_parser import JsonStreamParser, parse_tool_call
 
 LIVE = (
     '{"type":"live","posture":"good","eye_contact":"engaged",'
@@ -87,6 +87,42 @@ class JsonStreamParserTests(unittest.TestCase):
         self.parser.reset()
         events = self.parser.feed(LIVE)
         self.assertEqual(len(events), 1)
+
+    def test_parse_tool_call_live(self) -> None:
+        event = parse_tool_call(
+            "emit_live",
+            {
+                "posture": "good",
+                "eye_contact": "engaged",
+                "wpm": 120,
+                "filler_count": 1,
+                "tip": "Stand taller.",
+            },
+        )
+        self.assertIsInstance(event, LiveTick)
+        self.assertEqual(event.wpm, 120)
+
+    def test_parse_tool_call_summary(self) -> None:
+        event = parse_tool_call(
+            "emit_summary",
+            {
+                "overall_score": 80,
+                "posture_score": 80,
+                "eye_contact_score": 70,
+                "pace_score": 85,
+                "filler_score": 60,
+                "avg_wpm": 140,
+                "total_fillers": 5,
+                "strengths": ["Clear voice"],
+                "improvements": ["Fewer ums"],
+            },
+        )
+        self.assertIsInstance(event, SessionSummary)
+        self.assertEqual(event.overall_score, 80)
+
+    def test_parse_tool_call_unknown(self) -> None:
+        self.assertIsNone(parse_tool_call("chat", {"text": "hi"}))
+        self.assertIsNone(parse_tool_call("emit_live", None))
 
 
 if __name__ == "__main__":

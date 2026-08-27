@@ -1,7 +1,8 @@
-"""Gemini Live SDK client, TEXT session config, and token/quota knobs.
+"""Gemini Live SDK client, AUDIO session config, and token/quota knobs.
 
 Person 2: send JPEG ~1 FPS, max width 640, JPEG quality ~JPEG_QUALITY.
-Render live.* gauges; on stop, expect type: summary.
+Render live.* gauges; on stop, expect type: summary. Do not play model audio
+back to the speaker (feedback loop).
 
 Person 3:
     client = get_client()
@@ -9,10 +10,14 @@ Person 3:
     async with client.aio.live.connect(model=get_model_name(), config=config) as session:
         await session.send_realtime_input(audio=audio_blob(pcm_bytes))
         await session.send_realtime_input(video=video_blob(jpeg_bytes))
+        # Prefer tool calls (emit_live / emit_summary); ack them or the turn stalls.
+        # Also feed output transcription text into JsonStreamParser as a fallback.
         # on user stop:
         await session.send_realtime_input(text=SESSION_END_TEXT)
-    Forward JsonStreamParser output as JSON over the browser WebSocket.
+    Forward events as JSON over the browser WebSocket.
     Do not re-encode hotter than TARGET_FPS / MAX_FRAME_WIDTH / JPEG_QUALITY.
+
+Current Live models are native-audio: TEXT response_modality returns 1011.
 """
 
 from __future__ import annotations
@@ -24,7 +29,14 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from .prompts import SESSION_END_TEXT, SYSTEM_INSTRUCTION
+from .prompts import (
+    LIVE_TOOL_NAME,
+    LIVE_TOOL_PARAMETERS,
+    SESSION_END_TEXT,
+    SUMMARY_TOOL_NAME,
+    SUMMARY_TOOL_PARAMETERS,
+    SYSTEM_INSTRUCTION,
+)
 
 # Token / quota knobs. Live video max is already 1 FPS.
 TARGET_FPS = 1
@@ -32,8 +44,9 @@ MAX_FRAME_WIDTH = 640
 JPEG_QUALITY = 55
 AUDIO_SAMPLE_RATE = 16_000
 
-# Retired: gemini-2.0-flash-live-001. Use a TEXT-capable Live model, not native-audio-only.
-DEFAULT_MODEL = "gemini-live-2.5-flash-preview"
+# Gemini 3.1 Flash Live is the current Live API model (docs, Aug 2026).
+# Retired / inactive: gemini-2.0-flash-live-001, gemini-live-2.5-flash-preview.
+DEFAULT_MODEL = "gemini-3.1-flash-live-preview"
 MODEL_NAME = DEFAULT_MODEL
 
 _SERVER_DIR = Path(__file__).resolve().parents[2]
@@ -63,18 +76,52 @@ def get_client() -> genai.Client:
     return genai.Client(api_key=api_key)
 
 
-def build_live_config() -> types.LiveConnectConfig:
-    """TEXT-modality Live config with coaching system instruction.
+def _coaching_tools() -> list[types.Tool]:
+    return [
+        types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name=LIVE_TOOL_NAME,
+                    description=(
+                        "Report current posture, eye contact, WPM, and filler "
+                        "metrics for the live HUD."
+                    ),
+                    parameters=LIVE_TOOL_PARAMETERS,
+                ),
+                types.FunctionDeclaration(
+                    name=SUMMARY_TOOL_NAME,
+                    description="Report the final session scorecard after session_end.",
+                    parameters=SUMMARY_TOOL_PARAMETERS,
+                ),
+            ]
+        )
+    ]
 
-    input_audio_transcription gives the model a speech trace for WPM / fillers
-    even though we request TEXT output (not a talking coach).
+
+def build_live_config() -> types.LiveConnectConfig:
+    """Native-audio Live config with coaching instruction and HUD tools.
+
+    gemini-3.1-flash-live-preview only supports AUDIO response modality.
+    output_audio_transcription lets JsonStreamParser still harvest JSON if the
+    model speaks it. input_audio_transcription helps WPM / fillers.
     """
     return types.LiveConnectConfig(
-        response_modalities=[types.Modality.TEXT],
+        response_modalities=[types.Modality.AUDIO],
         system_instruction=types.Content(
             parts=[types.Part(text=SYSTEM_INSTRUCTION)]
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),
+        output_audio_transcription=types.AudioTranscriptionConfig(),
+        tools=_coaching_tools(),
+    )
+
+
+def ack_tool_call(function_call: types.FunctionCall) -> types.FunctionResponse:
+    """Dummy tool result so the Live turn can continue (3.1 tools are synchronous)."""
+    return types.FunctionResponse(
+        id=function_call.id,
+        name=function_call.name or LIVE_TOOL_NAME,
+        response={"ok": True},
     )
 
 

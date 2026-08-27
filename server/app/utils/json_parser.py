@@ -1,18 +1,24 @@
-"""Stream-safe JSON extractor for Gemini Live TEXT chunks.
+"""Stream-safe JSON extractor for Gemini Live output.
 
-Person 3: feed every `message.text` fragment into JsonStreamParser.feed and
-forward returned LiveTick / SessionSummary objects as JSON to the browser.
+Person 3: feed output-transcription fragments into JsonStreamParser.feed.
+Also call parse_tool_call() for emit_live / emit_summary function calls,
+then ack with ack_tool_call() or the native-audio turn stalls.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from typing import Union
+from typing import Any, Union
 
 from pydantic import ValidationError
 
-from ..gemini.prompts import LiveTick, SessionSummary
+from ..gemini.prompts import (
+    LIVE_TOOL_NAME,
+    LiveTick,
+    SessionSummary,
+    SUMMARY_TOOL_NAME,
+)
 
 CoachingEvent = Union[LiveTick, SessionSummary]
 
@@ -75,6 +81,19 @@ def _parse_event(raw: str) -> CoachingEvent | None:
             return SessionSummary.model_validate(payload)
     except (ValidationError, ValueError, TypeError):
         return None
+    return None
+
+
+def parse_tool_call(name: str | None, args: dict[str, Any] | None) -> CoachingEvent | None:
+    """Validate emit_live / emit_summary tool arguments into a coaching event."""
+    if not name or not isinstance(args, dict):
+        return None
+    if name == LIVE_TOOL_NAME:
+        payload: dict[str, Any] = {"type": "live", **args}
+        return _parse_event(json.dumps(payload))
+    if name == SUMMARY_TOOL_NAME:
+        payload = {"type": "summary", **args}
+        return _parse_event(json.dumps(payload))
     return None
 
 
