@@ -176,3 +176,8 @@ logs/
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+
+.cursor/
+
+__pycache__/
