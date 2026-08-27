@@ -21,7 +21,7 @@ from .prompts import (
     LIVE_TOOL_NAME,
     SESSION_END_TEXT,
     SUMMARY_TOOL_NAME,
-    SYSTEM_INSTRUCTION,
+    SYSTEM_PROMPT,
     LiveTick,
     SessionSummary,
 )
@@ -35,7 +35,7 @@ __all__ = [
     "MODEL_NAME",
     "SESSION_END_TEXT",
     "SUMMARY_TOOL_NAME",
-    "SYSTEM_INSTRUCTION",
+    "SYSTEM_PROMPT",
     "TARGET_FPS",
     "LiveTick",
     "SessionSummary",

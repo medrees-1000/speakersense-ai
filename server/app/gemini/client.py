@@ -35,7 +35,7 @@ from .prompts import (
     SESSION_END_TEXT,
     SUMMARY_TOOL_NAME,
     SUMMARY_TOOL_PARAMETERS,
-    SYSTEM_INSTRUCTION,
+    SYSTEM_PROMPT,
 )
 
 # Token / quota knobs. Live video max is already 1 FPS.
@@ -107,8 +107,8 @@ def build_live_config() -> types.LiveConnectConfig:
     """
     return types.LiveConnectConfig(
         response_modalities=[types.Modality.AUDIO],
-        system_instruction=types.Content(
-            parts=[types.Part(text=SYSTEM_INSTRUCTION)]
+        SYSTEM_PROMPT=types.Content(
+            parts=[types.Part(text=SYSTEM_PROMPT)]
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),
         output_audio_transcription=types.AudioTranscriptionConfig(),

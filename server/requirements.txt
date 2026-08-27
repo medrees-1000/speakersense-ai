@@ -1,6 +1,6 @@
 fastapi
 uvicorn[standard]
-google-genai
+google-genai>=1.40.0
 websockets
-python-dotenv
-pydantic
+python-dotenv>=1.0.0
+pydantic>=2.0.0

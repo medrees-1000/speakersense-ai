@@ -21,7 +21,7 @@ SESSION_END_TEXT = "session_end"
 LIVE_TOOL_NAME = "emit_live"
 SUMMARY_TOOL_NAME = "emit_summary"
 
-SYSTEM_INSTRUCTION = """You are SpeakerSense, a silent public-speaking evaluator.
+SYSTEM_PROMPT = """You are SpeakerSense, a silent public-speaking evaluator.
 
 You watch webcam frames and listen to microphone audio. You do NOT converse,
 greet, ask questions, or coach in prose. Prefer function calls over speech.

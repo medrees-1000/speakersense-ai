@@ -16,7 +16,7 @@ async def handle_gemini_stream(client_socket: WebSocket):
         model="gemini-live-2.5-flash-preview",
         config={
             "response_modalities": ["TEXT"],
-            "system_instruction": SYSTEM_PROMPT,
+            "SYSTEM_PROMPT": SYSTEM_PROMPT,
         }
     ) as session:
         
