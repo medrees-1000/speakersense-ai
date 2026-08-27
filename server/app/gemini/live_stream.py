@@ -65,15 +65,23 @@ async def _forward_browser_to_gemini(websocket: WebSocket, session) -> None:
 
 
 async def _forward_gemini_to_browser(websocket: WebSocket, session) -> None:
-    """Parse tool calls / transcribed JSON and push coaching events to the browser."""
+    """Parse tool calls / text JSON and push coaching events to the browser."""
     parser = JsonStreamParser()
 
     async for message in session.receive():
         if message.tool_call:
+            calls = message.tool_call.function_calls or []
+            logger.info("Gemini tool_call: %s", [fc.name for fc in calls])
             acks: list[types.FunctionResponse] = []
-            for fc in message.tool_call.function_calls or []:
+            for fc in calls:
                 event = parse_tool_call(fc.name, fc.args)
-                if event is not None:
+                if event is None:
+                    logger.warning(
+                        "Tool call %s did not validate into a coaching event: %s",
+                        fc.name,
+                        fc.args,
+                    )
+                else:
                     await _send_event(websocket, event)
                 acks.append(ack_tool_call(fc))
             if acks:
@@ -88,7 +96,9 @@ async def _forward_gemini_to_browser(websocket: WebSocket, session) -> None:
             if transcription is not None and getattr(transcription, "text", None):
                 text_bits.append(transcription.text)
         for chunk in text_bits:
+            logger.debug("Gemini text chunk: %r", chunk)
             for event in parser.feed(chunk):
+                logger.info("Parsed %s event from raw text fallback", event.type)
                 await _send_event(websocket, event)
 
 

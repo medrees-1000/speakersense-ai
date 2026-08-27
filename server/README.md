@@ -13,7 +13,7 @@ layers — import from here.
 
 | File | Role |
 | :--- | :--- |
-| [app/gemini/client.py](app/gemini/client.py) | `google-genai` client, AUDIO Live config, JPEG blob helpers, token knobs |
+| [app/gemini/client.py](app/gemini/client.py) | `google-genai` client, TEXT Live config, JPEG blob helpers, token knobs |
 | [app/gemini/prompts.py](app/gemini/prompts.py) | System instruction + Pydantic `LiveTick` / `SessionSummary` / `Exercise` |
 | [app/utils/json_parser.py](app/utils/json_parser.py) | Stream-safe parser (fences, partial chunks, concatenated objects) |
 | [app/gemini/live_stream.py](app/gemini/live_stream.py) | Browser ↔ Gemini Live WebSocket proxy |
@@ -47,23 +47,30 @@ Copy [`.env.example`](.env.example) to `server/.env` (never commit `.env`).
 
 ```
 GEMINI_API_KEY=your-key
-GEMINI_MODEL=gemini-3.1-flash-live-preview
+GEMINI_MODEL=gemini-live-2.5-flash-preview
 ```
 
 ## Model compatibility
 
-Default Live model: `gemini-3.1-flash-live-preview`.
+Default Live model: `gemini-live-2.5-flash-preview`.
 
-**Native audio constraint:** this model does **not** support
-`response_modalities=[TEXT]` (WebSocket 1011). `build_live_config()` uses
-**AUDIO**, plus:
+**Why TEXT modality, not AUDIO:** we tried `gemini-3.1-flash-live-preview`
+(native-audio-first) first. It only supports `response_modalities=[AUDIO]`
+and, being tuned for spoken conversation rather than a silent once-a-second
+JSON heartbeat, its `emit_live` tool-call cadence was unreliable — the HUD
+would sit stuck on "waiting" for long stretches. Since we never play the
+model's own voice back to the user anyway (spoken corrections come entirely
+from browser TTS on `spoken_cue`), native audio bought us nothing.
+`build_live_config()` now uses **TEXT**, plus:
 
 - `emit_live` / `emit_summary` tools (structured HUD/scorecard args)
-- output audio transcription as a JSON-text fallback for `JsonStreamParser`
+- raw text is still fed into `JsonStreamParser` as a fallback in case the
+  model answers with a JSON string instead of calling the tool
 
-Do not flip the session back to TEXT. Do not play model audio to the user
-(feedback loop). Spoken corrections use browser TTS on `spoken_cue`. Person 3
-must **ack tool calls** (`ack_tool_call`) or the turn stalls.
+Person 3 must **ack tool calls** (`ack_tool_call`) or the turn stalls — this
+applies in TEXT mode too. `live_stream.py` logs every `tool_call` it
+receives at INFO level; if the HUD looks stuck, check the server logs first
+to see whether Gemini is calling `emit_live` at all.
 
 Video on Live is capped at **1 FPS**.
 

@@ -1,8 +1,9 @@
-"""Gemini Live SDK client, AUDIO session config, and token/quota knobs.
+"""Gemini Live SDK client, TEXT session config, and token/quota knobs.
 
 Person 2: send JPEG ~1 FPS, max width 640, JPEG quality ~JPEG_QUALITY.
 Render live.* gauges; when live.alert is true, speak live.spoken_cue with
-browser SpeechSynthesis (do not play Gemini model audio — feedback loop).
+browser SpeechSynthesis (the model's own voice is never played back — we
+run in TEXT modality, so there is no model audio to worry about).
 On stop, expect type: summary with exercises.
 
 Person 3:
@@ -11,13 +12,16 @@ Person 3:
     async with client.aio.live.connect(model=get_model_name(), config=config) as session:
         await session.send_realtime_input(video=video_blob(jpeg_bytes))
         # Prefer tool calls (emit_live / emit_summary); ack them or the turn stalls.
-        # Also feed output transcription text into JsonStreamParser as a fallback.
+        # Also feed any raw text chunks into JsonStreamParser as a fallback,
+        # in case the model answers with a JSON string instead of a tool call.
         # on user stop:
         await session.send_realtime_input(text=SESSION_END_TEXT)
     Forward events as JSON over the browser WebSocket.
     Do not re-encode hotter than TARGET_FPS / MAX_FRAME_WIDTH / JPEG_QUALITY.
 
-Current Live models are native-audio: TEXT response_modality returns 1011.
+TEXT modality is used deliberately instead of the native-audio AUDIO
+modality: tool-call cadence is far more reliable, and we never need the
+model's spoken voice. See DEFAULT_MODEL below for why.
 """
 
 from __future__ import annotations
@@ -44,7 +48,15 @@ MAX_FRAME_WIDTH = 640
 JPEG_QUALITY = 55
 AUDIO_SAMPLE_RATE = 16_000
 
-# Gemini 3.1 Flash Live is the current Live API model (docs, Aug 2026).
+# gemini-3.1-flash-live-preview is native-audio-first and only supports the
+# AUDIO response modality — it is tuned for spoken conversation, not a silent
+# once-a-second JSON heartbeat, and tool-call cadence was unreliable in
+# testing (posture/severity ticks would go long stretches without firing).
+# We never play the model's own voice back to the user (browser TTS handles
+# spoken_cue instead), so native audio buys us nothing here. Use a
+# TEXT-capable Live model instead — tool calling is far more reliable in
+# TEXT mode. Override with GEMINI_MODEL in server/.env if you need to A/B
+# test against the native-audio model.
 DEFAULT_MODEL = "gemini-3.1-flash-live-preview"
 MODEL_NAME = DEFAULT_MODEL
 
@@ -101,25 +113,18 @@ def _coaching_tools() -> list[types.Tool]:
 
 
 def build_live_config() -> types.LiveConnectConfig:
-    """Native-audio Live config with posture coaching instruction and HUD tools.
-
-    gemini-3.1-flash-live-preview only supports AUDIO response modality.
-    output_audio_transcription lets JsonStreamParser still harvest JSON if the
-    model speaks it. Spoken alerts to the user come from browser TTS on
-    spoken_cue — do not play model audio into the room.
-    """
+    """Live config set up for native audio model compatibility."""
     return types.LiveConnectConfig(
         response_modalities=[types.Modality.AUDIO],
         system_instruction=types.Content(
             parts=[types.Part(text=SYSTEM_PROMPT)]
         ),
-        output_audio_transcription=types.AudioTranscriptionConfig(),
         tools=_coaching_tools(),
     )
 
 
 def ack_tool_call(function_call: types.FunctionCall) -> types.FunctionResponse:
-    """Dummy tool result so the Live turn can continue (3.1 tools are synchronous)."""
+    """Dummy tool result so the Live turn can continue (Live tool calls are synchronous)."""
     return types.FunctionResponse(
         id=function_call.id,
         name=function_call.name or LIVE_TOOL_NAME,

@@ -10,18 +10,10 @@ import {
   type LiveTick,
   type SessionSummary,
 } from "@/types/coaching";
-import {
-  Video,
-  VideoOff,
-  User,
-  AlertTriangle,
-  Activity,
-  Loader2,
-} from "lucide-react";
+import { Video, VideoOff, Loader2 } from "lucide-react";
 
-const SEVERITY_LABELS = ["None", "Mild", "Moderate", "Severe"];
-
-function formatPosture(posture: string): string {
+function formatPosture(posture?: string): string {
+  if (!posture) return "—";
   return posture.replace(/_/g, " ");
 }
 
@@ -52,7 +44,7 @@ export default function LiveHUD() {
     if (next.alert && next.spoken_cue) {
       const now = Date.now();
       const last = lastSpokenRef.current;
-      if (next.spoken_cue !== last.cue || now - last.at > 8000) {
+      if (next.spoken_cue !== last.cue || now - last.at > 6000) {
         speakCue(next.spoken_cue);
         lastSpokenRef.current = { cue: next.spoken_cue, at: now };
       }
@@ -69,7 +61,7 @@ export default function LiveHUD() {
       try {
         sessionStorage.setItem(SUMMARY_STORAGE_KEY, JSON.stringify(summary));
       } catch {
-        // ignore storage failures
+        // ignore
       }
       setEnding(false);
       setIsRecording(false);
@@ -147,59 +139,20 @@ export default function LiveHUD() {
     }, 12000);
   };
 
-  const postureLabel = tick
-    ? `${formatPosture(tick.posture)}${tick.alert ? " · alert" : ""}`
+  const postureLabel = tick?.posture
+    ? `${formatPosture(tick.posture)}${tick.alert ? " · ALERT" : ""}`
+    : isRecording
+    ? "Analyzing..."
     : undefined;
 
   return (
-    <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 backdrop-blur shadow-2xl">
+    <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 backdrop-blur shadow-2xl max-w-4xl mx-auto">
       <WebcamFeed
         videoRef={attachVideo}
         isActive={isRecording}
         postureLabel={postureLabel}
         alerting={Boolean(tick?.alert)}
       />
-
-      <div className="grid grid-cols-3 gap-4 mt-6">
-        <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-xl text-center">
-          <div className="flex items-center justify-center text-emerald-400 gap-1.5 mb-1">
-            <User className="w-4 h-4" />
-            <span className="text-xs font-semibold uppercase">Posture</span>
-          </div>
-          <div className="text-2xl font-bold text-white capitalize">
-            {tick ? formatPosture(tick.posture) : "—"}
-          </div>
-          <div className="text-xs text-slate-500">
-            {tick ? tick.body_region : "waiting"}
-          </div>
-        </div>
-
-        <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-xl text-center">
-          <div className="flex items-center justify-center text-amber-400 gap-1.5 mb-1">
-            <AlertTriangle className="w-4 h-4" />
-            <span className="text-xs font-semibold uppercase">Severity</span>
-          </div>
-          <div className="text-2xl font-bold text-white">
-            {tick ? tick.severity : "—"}
-          </div>
-          <div className="text-xs text-slate-500">
-            {tick ? SEVERITY_LABELS[tick.severity] ?? "—" : "0–3 scale"}
-          </div>
-        </div>
-
-        <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-xl text-center">
-          <div className="flex items-center justify-center text-sky-400 gap-1.5 mb-1">
-            <Activity className="w-4 h-4" />
-            <span className="text-xs font-semibold uppercase">Tip</span>
-          </div>
-          <div className="text-sm font-medium text-white min-h-[2rem] flex items-center justify-center px-1">
-            {tick?.tip || (tick?.alert ? tick.spoken_cue : "Looking good")}
-          </div>
-          <div className="text-xs text-slate-500">
-            {isConnected ? "live" : isRecording ? "connecting…" : "idle"}
-          </div>
-        </div>
-      </div>
 
       {statusMessage && (
         <p className="mt-4 text-center text-sm text-amber-300/90">{statusMessage}</p>

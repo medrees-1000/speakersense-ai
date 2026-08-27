@@ -11,7 +11,7 @@ emits one summary object. Forward parser output as JSON over the browser WS.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -29,8 +29,8 @@ greet, ask questions, or chat in prose. Prefer function calls over speech.
 Call emit_live about once per second with current posture metrics.
 When the user text is exactly "session_end", call emit_summary once.
 
-If you must vocalize, speak ONLY a single raw JSON object (same fields as the
-tool). No markdown, no fences, no other words.
+If you cannot call the tool, respond with ONLY a single raw JSON object
+(same fields as the tool). No markdown, no fences, no other words.
 
 ## What to evaluate (VIDEO frames only)
 
@@ -63,7 +63,7 @@ Judge the user's body alignment relative to the camera:
 
 ## Live updates (emit_live)
 
-About once per second, call emit_live. Equivalent JSON if you must speak:
+About once per second, call emit_live. Equivalent JSON if you answer in text:
 
 {"type":"live","posture":"slouching","severity":2,"body_region":"spine","alert":true,"spoken_cue":"Sit up — shoulders back.","tip":"Unround your upper back."}
 
@@ -124,8 +124,8 @@ class LiveTick(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     type: Literal["live"] = "live"
-    posture: Posture
-    severity: int = Field(ge=0, le=3)
+    posture: Posture = Posture.good
+    severity: int = Field(default=0, ge=0, le=3)
     body_region: BodyRegion = BodyRegion.overall
     alert: bool = False
     spoken_cue: str = ""
@@ -134,6 +134,8 @@ class LiveTick(BaseModel):
     @field_validator("severity", mode="before")
     @classmethod
     def _clamp_severity(cls, value: object) -> int:
+        if value is None:
+            return 0
         return min(3, max(0, int(round(float(value)))))  # type: ignore[arg-type]
 
     @field_validator("spoken_cue", mode="before")
@@ -190,11 +192,11 @@ class SessionSummary(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     type: Literal["summary"] = "summary"
-    overall_score: int = Field(ge=0, le=100)
-    posture_score: int = Field(ge=0, le=100)
-    alignment_score: int = Field(ge=0, le=100)
-    time_good_pct: int = Field(ge=0, le=100)
-    slouch_events: int = Field(ge=0)
+    overall_score: int = Field(default=75, ge=0, le=100)
+    posture_score: int = Field(default=75, ge=0, le=100)
+    alignment_score: int = Field(default=75, ge=0, le=100)
+    time_good_pct: int = Field(default=80, ge=0, le=100)
+    slouch_events: int = Field(default=0, ge=0)
     worst_habit: WorstHabit = WorstHabit.none
     strengths: list[str] = Field(default_factory=list)
     improvements: list[str] = Field(default_factory=list)
@@ -209,11 +211,15 @@ class SessionSummary(BaseModel):
     )
     @classmethod
     def _clamp_score(cls, value: object) -> int:
+        if value is None:
+            return 0
         return min(100, max(0, int(round(float(value)))))  # type: ignore[arg-type]
 
     @field_validator("slouch_events", mode="before")
     @classmethod
     def _coerce_nonneg_int(cls, value: object) -> int:
+        if value is None:
+            return 0
         return max(0, int(round(float(value))))  # type: ignore[arg-type]
 
 

@@ -14,7 +14,7 @@ export default function HomePage() {
         </p>
       </header>
 
-      <div className="w-full max-w-4xl">
+      <div className="w-full max-w-6xl">
         <LiveHUD />
       </div>
     </main>
