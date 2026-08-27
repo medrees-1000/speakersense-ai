@@ -181,3 +181,5 @@ vite.config.ts.timestamp-*
 .cursor/
 
 __pycache__/
+
+.env
