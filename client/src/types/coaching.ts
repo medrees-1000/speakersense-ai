@@ -49,3 +49,12 @@ export interface SessionSummary {
 export type CoachingEvent = LiveTick | SessionSummary;
 
 export const SUMMARY_STORAGE_KEY = "posturesense_summary";
+
+export interface PostureMetrics {
+  posture: PostureStatus;
+  severity: number;
+  tip: string;
+  headOffset: number;
+  shoulderTilt: number;
+  confidence: number;
+}

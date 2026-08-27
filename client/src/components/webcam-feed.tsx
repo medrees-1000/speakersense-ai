@@ -1,47 +1,56 @@
 "use client";
 
-import { RefObject } from "react";
+import type { RefObject } from "react";
+import type { PostureMetrics } from "../types/coaching";
 
 interface WebcamFeedProps {
-  videoRef: (node: HTMLVideoElement | null) => void;
-  isActive: boolean;
-  postureLabel?: string;
-  alerting?: boolean;
+  active: boolean;
+  videoRef: RefObject<HTMLVideoElement>;
+  metrics: PostureMetrics | null;
+  loading?: boolean;
+  error?: string | null;
 }
 
 export default function WebcamFeed({
+  active,
   videoRef,
-  isActive,
-  postureLabel,
-  alerting = false,
+  metrics,
+  loading,
+  error,
 }: WebcamFeedProps) {
   return (
-    <div className="relative w-full max-w-3xl mx-auto aspect-video bg-slate-950 rounded-xl overflow-hidden border border-slate-800 shadow-inner">
+    <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-slate-950">
       <video
         ref={videoRef}
-        autoPlay
-        playsInline
         muted
-        className={`w-full h-full object-cover transform -scale-x-100 transition-opacity duration-300 ${
-          isActive ? "opacity-100" : "opacity-20"
-        }`}
+        playsInline
+        className={`h-full w-full object-cover ${active ? "" : "hidden"}`}
       />
 
-      {!isActive && (
-        <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-sm font-medium">
-          Camera feed inactive
+      {!active && (
+        <div className="flex h-full items-center justify-center text-slate-400">
+          Camera paused
         </div>
       )}
 
-      {isActive && postureLabel && (
-        <div
-          className={`absolute top-4 left-4 px-3 py-1.5 rounded-lg text-xs font-semibold backdrop-blur transition-colors ${
-            alerting
-              ? "bg-red-500/80 text-white animate-pulse"
-              : "bg-slate-900/80 text-emerald-400 border border-slate-700"
-          }`}
-        >
-          {postureLabel}
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
+          Starting posture detection…
+        </div>
+      )}
+
+      {error && (
+        <div className="absolute bottom-3 left-3 right-3 rounded-lg bg-red-500/90 p-3 text-sm text-white">
+          {error}
+        </div>
+      )}
+
+      {metrics && active && (
+        <div className="absolute left-4 top-4 rounded-xl bg-slate-950/80 px-4 py-3 text-white">
+          <div className="text-xs uppercase tracking-wider text-emerald-300">
+            Live posture
+          </div>
+          <div className="font-semibold">{metrics.posture.replace("_", " ")}</div>
         </div>
       )}
     </div>
