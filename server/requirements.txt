@@ -1,3 +1,6 @@
-google-genai>=1.40.0
-python-dotenv>=1.0.0
-pydantic>=2.0.0
+fastapi
+uvicorn[standard]
+google-genai
+websockets
+python-dotenv
+pydantic
