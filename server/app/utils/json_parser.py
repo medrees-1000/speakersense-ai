@@ -1,4 +1,4 @@
-"""Stream-safe JSON extractor for Gemini Live output.
+"""Stream-safe JSON extractor for Gemini Live posture coaching output.
 
 Person 3: feed output-transcription fragments into JsonStreamParser.feed.
 Also call parse_tool_call() for emit_live / emit_summary function calls,

@@ -1,14 +1,14 @@
 """Gemini Live SDK client, AUDIO session config, and token/quota knobs.
 
 Person 2: send JPEG ~1 FPS, max width 640, JPEG quality ~JPEG_QUALITY.
-Render live.* gauges; on stop, expect type: summary. Do not play model audio
-back to the speaker (feedback loop).
+Render live.* gauges; when live.alert is true, speak live.spoken_cue with
+browser SpeechSynthesis (do not play Gemini model audio — feedback loop).
+On stop, expect type: summary with exercises.
 
 Person 3:
     client = get_client()
     config = build_live_config()
     async with client.aio.live.connect(model=get_model_name(), config=config) as session:
-        await session.send_realtime_input(audio=audio_blob(pcm_bytes))
         await session.send_realtime_input(video=video_blob(jpeg_bytes))
         # Prefer tool calls (emit_live / emit_summary); ack them or the turn stalls.
         # Also feed output transcription text into JsonStreamParser as a fallback.
@@ -45,7 +45,6 @@ JPEG_QUALITY = 55
 AUDIO_SAMPLE_RATE = 16_000
 
 # Gemini 3.1 Flash Live is the current Live API model (docs, Aug 2026).
-# Retired / inactive: gemini-2.0-flash-live-001, gemini-live-2.5-flash-preview.
 DEFAULT_MODEL = "gemini-3.1-flash-live-preview"
 MODEL_NAME = DEFAULT_MODEL
 
@@ -83,14 +82,17 @@ def _coaching_tools() -> list[types.Tool]:
                 types.FunctionDeclaration(
                     name=LIVE_TOOL_NAME,
                     description=(
-                        "Report current posture, eye contact, WPM, and filler "
-                        "metrics for the live HUD."
+                        "Report current posture, severity, body region, and "
+                        "spoken alert cue for the live HUD."
                     ),
                     parameters=LIVE_TOOL_PARAMETERS,
                 ),
                 types.FunctionDeclaration(
                     name=SUMMARY_TOOL_NAME,
-                    description="Report the final session scorecard after session_end.",
+                    description=(
+                        "Report the final posture scorecard and corrective "
+                        "exercises after session_end."
+                    ),
                     parameters=SUMMARY_TOOL_PARAMETERS,
                 ),
             ]
@@ -99,18 +101,18 @@ def _coaching_tools() -> list[types.Tool]:
 
 
 def build_live_config() -> types.LiveConnectConfig:
-    """Native-audio Live config with coaching instruction and HUD tools.
+    """Native-audio Live config with posture coaching instruction and HUD tools.
 
     gemini-3.1-flash-live-preview only supports AUDIO response modality.
     output_audio_transcription lets JsonStreamParser still harvest JSON if the
-    model speaks it. input_audio_transcription helps WPM / fillers.
+    model speaks it. Spoken alerts to the user come from browser TTS on
+    spoken_cue — do not play model audio into the room.
     """
     return types.LiveConnectConfig(
         response_modalities=[types.Modality.AUDIO],
-        SYSTEM_PROMPT=types.Content(
+        system_instruction=types.Content(
             parts=[types.Part(text=SYSTEM_PROMPT)]
         ),
-        input_audio_transcription=types.AudioTranscriptionConfig(),
         output_audio_transcription=types.AudioTranscriptionConfig(),
         tools=_coaching_tools(),
     )

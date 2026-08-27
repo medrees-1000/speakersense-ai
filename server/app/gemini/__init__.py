@@ -1,4 +1,4 @@
-"""Gemini Live client, prompts, and JSON contract for SpeakerSense.
+"""Gemini Live client, prompts, and JSON contract for PostureSense.
 
 Person 3 should import from here rather than reaching into submodules.
 """
@@ -22,6 +22,7 @@ from .prompts import (
     SESSION_END_TEXT,
     SUMMARY_TOOL_NAME,
     SYSTEM_PROMPT,
+    Exercise,
     LiveTick,
     SessionSummary,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "SUMMARY_TOOL_NAME",
     "SYSTEM_PROMPT",
     "TARGET_FPS",
+    "Exercise",
     "LiveTick",
     "SessionSummary",
     "ack_tool_call",

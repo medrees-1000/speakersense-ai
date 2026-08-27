@@ -1,38 +1,42 @@
-import os
+import logging
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+
 from app.gemini.live_stream import handle_gemini_stream
 
 load_dotenv()
 
-app = FastAPI(title="SpeakerSense AI Gateway")
+logging.basicConfig(level=logging.INFO)
 
-# Enable CORD for Next.js frontend
+app = FastAPI(title="PostureSense AI Gateway")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
+
 
 @app.get("/")
 def health_check():
-    return {"status": "ok", "service": "SpeakerSense AI Backend"}
+    return {"status": "ok", "service": "PostureSense AI Backend"}
+
 
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("Client connected to WebSocket gateway")
+    print("Client connected to posture WebSocket gateway")
     try:
         await handle_gemini_stream(websocket)
     except WebSocketDisconnect:
         print("Client disconnected")
     except Exception as e:
         print(f"Error in WebSocket session: {e}")
-        await websocket.close()
-        
-
-
-
+        try:
+            await websocket.close()
+        except Exception:
+            pass

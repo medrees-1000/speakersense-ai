@@ -8,14 +8,16 @@ from app.gemini.prompts import LiveTick, SessionSummary
 from app.utils.json_parser import JsonStreamParser, parse_tool_call
 
 LIVE = (
-    '{"type":"live","posture":"good","eye_contact":"engaged",'
-    '"wpm":142,"filler_count":4,"tip":"Lift your chin toward the camera."}'
+    '{"type":"live","posture":"slouching","severity":2,"body_region":"spine",'
+    '"alert":true,"spoken_cue":"Sit up — shoulders back.",'
+    '"tip":"Unround your upper back."}'
 )
 SUMMARY = (
-    '{"type":"summary","overall_score":78,"posture_score":80,'
-    '"eye_contact_score":72,"pace_score":85,"filler_score":64,'
-    '"avg_wpm":145,"total_fillers":12,"strengths":["Steady pace"],'
-    '"improvements":["Watch filler like"]}'
+    '{"type":"summary","overall_score":72,"posture_score":68,'
+    '"alignment_score":74,"time_good_pct":61,"slouch_events":7,'
+    '"worst_habit":"forward_head","strengths":["Kept hips square"],'
+    '"improvements":["Round upper back when focusing"],'
+    '"exercises":[{"name":"Chin tucks","reps":"10 x 5s","why":"Counters forward head"}]}'
 )
 
 
@@ -28,9 +30,10 @@ class JsonStreamParserTests(unittest.TestCase):
         self.assertEqual(len(events), 1)
         tick = events[0]
         self.assertIsInstance(tick, LiveTick)
-        self.assertEqual(tick.posture.value, "good")
-        self.assertEqual(tick.wpm, 142)
-        self.assertEqual(tick.filler_count, 4)
+        self.assertEqual(tick.posture.value, "slouching")
+        self.assertEqual(tick.severity, 2)
+        self.assertTrue(tick.alert)
+        self.assertIn("Sit up", tick.spoken_cue)
 
     def test_strips_markdown_fences(self) -> None:
         fenced = f"```json\n{LIVE}\n```"
@@ -50,7 +53,8 @@ class JsonStreamParserTests(unittest.TestCase):
         self.assertEqual(len(events), 2)
         self.assertIsInstance(events[0], LiveTick)
         self.assertIsInstance(events[1], SessionSummary)
-        self.assertEqual(events[1].overall_score, 78)
+        self.assertEqual(events[1].overall_score, 72)
+        self.assertEqual(len(events[1].exercises), 1)
 
     def test_garbage_then_json(self) -> None:
         events = self.parser.feed("Sure, here you go:\n" + LIVE)
@@ -58,7 +62,10 @@ class JsonStreamParserTests(unittest.TestCase):
         self.assertIsInstance(events[0], LiveTick)
 
     def test_invalid_object_is_dropped(self) -> None:
-        bad = '{"type":"live","posture":"upright","eye_contact":"engaged","wpm":10,"filler_count":0}'
+        bad = (
+            '{"type":"live","posture":"upright","severity":2,'
+            '"body_region":"spine","alert":false}'
+        )
         events = self.parser.feed(bad + LIVE)
         self.assertEqual(len(events), 1)
         self.assertIsInstance(events[0], LiveTick)
@@ -75,12 +82,24 @@ class JsonStreamParserTests(unittest.TestCase):
     def test_tip_truncated_to_twelve_words(self) -> None:
         long_tip = " ".join(["word"] * 20)
         raw = (
-            '{"type":"live","posture":"slouching","eye_contact":"looking_away",'
-            f'"wpm":90,"filler_count":2,"tip":"{long_tip}"}}'
+            '{"type":"live","posture":"slouching","severity":2,'
+            f'"body_region":"spine","alert":true,"spoken_cue":"Sit up.",'
+            f'"tip":"{long_tip}"}}'
         )
         events = self.parser.feed(raw)
         self.assertEqual(len(events), 1)
         self.assertEqual(len(events[0].tip.split()), 12)
+
+    def test_spoken_cue_truncated_to_ten_words(self) -> None:
+        long_cue = " ".join(["fix"] * 15)
+        raw = (
+            '{"type":"live","posture":"leaning","severity":3,'
+            f'"body_region":"hips","alert":true,"spoken_cue":"{long_cue}",'
+            '"tip":""}'
+        )
+        events = self.parser.feed(raw)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(len(events[0].spoken_cue.split()), 10)
 
     def test_reset_clears_partial(self) -> None:
         self.parser.feed(LIVE[:10])
@@ -93,32 +112,41 @@ class JsonStreamParserTests(unittest.TestCase):
             "emit_live",
             {
                 "posture": "good",
-                "eye_contact": "engaged",
-                "wpm": 120,
-                "filler_count": 1,
-                "tip": "Stand taller.",
+                "severity": 0,
+                "body_region": "overall",
+                "alert": False,
+                "spoken_cue": "",
+                "tip": "Nice tall spine.",
             },
         )
         self.assertIsInstance(event, LiveTick)
-        self.assertEqual(event.wpm, 120)
+        self.assertEqual(event.severity, 0)
+        self.assertFalse(event.alert)
 
     def test_parse_tool_call_summary(self) -> None:
         event = parse_tool_call(
             "emit_summary",
             {
                 "overall_score": 80,
-                "posture_score": 80,
-                "eye_contact_score": 70,
-                "pace_score": 85,
-                "filler_score": 60,
-                "avg_wpm": 140,
-                "total_fillers": 5,
-                "strengths": ["Clear voice"],
-                "improvements": ["Fewer ums"],
+                "posture_score": 78,
+                "alignment_score": 82,
+                "time_good_pct": 70,
+                "slouch_events": 3,
+                "worst_habit": "slouching",
+                "strengths": ["Steady shoulders"],
+                "improvements": ["Watch mid-session slump"],
+                "exercises": [
+                    {
+                        "name": "Wall angels",
+                        "reps": "2 x 8",
+                        "why": "Opens shoulders",
+                    }
+                ],
             },
         )
         self.assertIsInstance(event, SessionSummary)
         self.assertEqual(event.overall_score, 80)
+        self.assertEqual(event.exercises[0].name, "Wall angels")
 
     def test_parse_tool_call_unknown(self) -> None:
         self.assertIsNone(parse_tool_call("chat", {"text": "hi"}))

@@ -56,9 +56,9 @@ class LiveConfigTests(unittest.TestCase):
         self.assertIn("emit_live", names)
         self.assertIn("emit_summary", names)
 
-    def test_SYSTEM_PROMPT_present(self) -> None:
+    def test_system_instruction_present(self) -> None:
         config = build_live_config()
-        self.assertIsNotNone(config.SYSTEM_PROMPT)
+        self.assertIsNotNone(config.system_instruction)
 
     def test_blob_helpers(self) -> None:
         pcm = b"\x00\x00"
