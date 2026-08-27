@@ -8,8 +8,15 @@ function defaultWsUrl(): string {
     return process.env.NEXT_PUBLIC_WS_URL;
   }
   if (typeof window !== "undefined") {
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    return `${proto}://localhost:8000/ws/stream`;
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const isLocal =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname === "::1";
+    const host = isLocal
+      ? `${window.location.hostname}:8000`
+      : window.location.host;
+    return `${proto}//${host}/ws/stream`;
   }
   return "ws://localhost:8000/ws/stream";
 }
@@ -49,7 +56,9 @@ export function usePostureSocket(options: UsePostureSocketOptions = {}) {
       if (wsRef.current === ws) wsRef.current = null;
     };
     ws.onerror = () => {
-      optionsRef.current.onError?.("WebSocket connection failed. Is the backend running?");
+      optionsRef.current.onError?.(
+        `WebSocket connection failed (${ws.url}). Check that the backend is running.`
+      );
     };
     ws.onmessage = (event) => {
       try {
